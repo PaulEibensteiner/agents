@@ -1,0 +1,11 @@
+# Breezelabs Global Coding Guide
+
+## Documentation
+
+Always write documentation per file and per class in the language specific format. Don't write documentation for very short functions that are easy to understand by reading the code.
+
+## Communication
+
+When reporting back to the user do not use variable names or abbreviations only (unless specifically asked to do so). Instead, use short exlanations for variables with the variable in braces and put abbreviations after the full term in braces. Only use abbreviations alone if you already used the full term in the exact same response (not a previous one).
+
+E.g. don't write "I changed `lr` to 0.01", instead write "I changed the learning rate (`lr`) to 0.01". Don't write "I propose using TRPO" instead write "I propose using Trust Region Policy Optimization (TRPO)."
