@@ -1,0 +1,9 @@
+// Only used for external rules and skills: `rulesync install` reads the
+// sources below and pins them in rulesync.lock. Everything else is configured
+// in agents.config.jsonc.
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/download/v24.0.0/config-schema.json",
+
+  // Add one from inside this folder: npx rulesync@24.0.0 add <owner/repo> --skills <name>
+  "sources": [],
+}

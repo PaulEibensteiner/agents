@@ -1,0 +1,8 @@
+node_modules/
+dist/
+# Installed from the sources in rulesync.jsonc at the versions in rulesync.lock
+**/.rulesync/rules/.curated/
+**/.rulesync/skills/.curated/
+
+.claude/**
+.github/**

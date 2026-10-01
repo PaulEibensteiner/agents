@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Breezelabs agents configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "personalRepo": {
+      "type": "string",
+      "description": "Path to your personal agents repo (its .rulesync/ folder is synced after the company one). ~ is expanded."
+    },
+    "reposRoot": {
+      "type": "string",
+      "description": "Folder containing your project repos. Every repo directly inside it with a .rulesync/ folder is synced. ~ is expanded."
+    },
+    "globalDir": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Folder in the company and personal repos holding the global sources (<globalDir>/.rulesync/ and <globalDir>/rulesync.jsonc). A repo's root .rulesync/ is project-level for that repo only."
+    },
+    "global": {
+      "$ref": "#/definitions/targets",
+      "description": "Agents (rulesync targets) and features for the user-level configuration."
+    },
+    "projects": {
+      "$ref": "#/definitions/targets",
+      "description": "Agents (rulesync targets) and features for project repos without their own rulesync.jsonc."
+    },
+    "marker": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Text every source rule and SKILL.md must contain, so generated files can be told apart from hand-written ones."
+    },
+    "gitHooks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Git hooks installed by `install-hooks`."
+    }
+  },
+  "definitions": {
+    "targets": {
+      "type": "object",
+      "description": "Maps a rulesync target (e.g. claudecode, copilot) to the features generated for it.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "enum": ["rules", "ignore", "mcp", "subagents", "commands", "skills", "hooks", "permissions", "checks"]
+        }
+      }
+    }
+  }
+}

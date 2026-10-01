@@ -1,6 +1,0 @@
-agents_personal: "/home/paul/repos/agents-personal"
-repos_root: "/home/paul/repos"
-# WSL only, optional: also write the VS Code files to the Windows home folder.
-# Only needed for VS Code windows opened on Windows folders; windows connected
-# to WSL read the Linux home. Leave empty to skip.
-wsl_windows_home: ""

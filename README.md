@@ -21,68 +21,112 @@ There are three sources of agent configuration, all using the same vendor-agnost
 | Source | Lives in | Applies to |
 |---|---|---|
 | Company | this repo | every employee, every project |
-| Personal | each employee's `agents_personal` repo | one employee, every project |
+| Personal | each employee's personal agents repo | one employee, every project |
 | Project | each repository | everyone working on that project |
 
-A single command (`sync`) makes all three available to the agents listed in `vendor_formats`, for the current OS.
+A single command makes all three available to the agents each user chooses in their own config. It uses [rulesync](https://rulesync.dyoshikawa.com) to convert the sources into each agent's format and location.
+
+### Usage
+
+The tool runs straight from this repo with npx, no clone needed (Node.js 22 or newer):
+
+```bash
+npx github:BreezeLabsAG/agents init           # once: creates your user config
+npx github:BreezeLabsAG/agents --dry-run      # show what would change
+npx github:BreezeLabsAG/agents                # sync global + all projects
+npx github:BreezeLabsAG/agents global | projects | project <path> | install-hooks
+```
+
+Each run fetches the latest `main`, so everyone syncs from the reviewed company sources. The first run takes a few seconds longer, as npm builds the package.
+
+If your SSH config uses a host alias for GitHub, use the full git URL instead, e.g. `npx git+ssh://git@<alias>/BreezeLabsAG/agents.git`.
+
+### Configuration
+
+All configuration is JSONC, validated by `config.schema.json`:
+
+- `agents.config.jsonc` in this repo holds the company settings: the global sources folder, the generated-file marker and the git hooks.
+- `~/.config/breezelabs-agents/config.jsonc` holds your own settings: the path of your personal repo, the folder containing your project repos, and which agents and features to generate globally and for projects. `init` creates it with Claude Code and VS Code Copilot enabled; remove the agents you don't use. Any company key can be overridden here as well.
 
 ### Vendor Agnostic Layout
 
-Company and personal repos share this layout:
+All sources use the rulesync source layout:
 
 ```
-instructions/
-  AGENTS.md              # global instructions, minimal
-skills/
-  <skill-name>/
-    SKILL.md             # loaded by the agent only when relevant
-    ...                  # optional supporting files
-mcp/                     # global MCP servers, ideally empty
+.rulesync/
+  rules/
+    <name>.md             # instructions; root: true for always-loaded ones, globs for path-scoped ones
+  skills/
+    <skill-name>/
+      SKILL.md            # loaded by the agent only when relevant
+      ...                 # optional supporting files
+  mcp.jsonc               # MCP servers, ideally only in projects
+rulesync.jsonc            # optional: external sources, or a project's own agents and features
 ```
 
-Repositories use the same layout, with `AGENTS.md` at the repo root:
+In project repos this sits at the repo root. The company and personal repos keep their global sources in a `global/` folder (set by `globalDir` in `agents.config.jsonc`), so their own root `.rulesync/` stays project-level. For example, the rulesync skill for maintaining this repo is only installed for this repo, not for everyone:
 
 ```
-<repo>/
-  AGENTS.md
-  .agents/
-    skills/<skill-name>/SKILL.md
-    mcp/
+agents/                   # or the personal repo
+  global/
+    .rulesync/            # synced to every agent globally
+    rulesync.jsonc
+  .rulesync/              # project-level, only for working on this repo
 ```
 
-The exact file formats inside `skills/` and `mcp/` are still to be defined.
+The file formats are described in the [rulesync documentation](https://rulesync.dyoshikawa.com/reference/file-formats). Rules marked `root: true` in the company and personal repos are combined into one instructions file per agent.
 
-### The `sync` Command
+External rules and skills (e.g. from `anthropics/skills`) are declared under `sources` in the `rulesync.jsonc` next to the `.rulesync/` folder, pinned to a commit in `rulesync.lock`, and installed automatically on every sync. Add one by running `npx rulesync@24.0.0 add <owner/repo> --skills <name>` in that folder.
 
-`sync` runs three stages: company, personal, project (for all repos under `repos_root`). For each vendor in `vendor_formats` it makes the sources discoverable, preferring the least invasive option:
+### The Sync Command
 
-1. **Native:** the vendor already reads the source (e.g. `AGENTS.md`). Nothing to do.
-2. **Import:** the vendor's entry file (e.g. a user-level instructions file) imports the source. `sync` makes sure this entry file exists and contains the import.
-3. **Link:** the vendor folder symlinks to the source folder.
-4. **Copy:** the source is copied and converted into the vendor's format. Used only if 1–3 aren't possible.
-5. **Vendor CLI:** configuration the vendor manages itself (e.g. MCP servers in Claude Code) is applied via its CLI, never by editing its files.
+The sync runs two stages:
 
-Supported OS categories so far: Linux, macOS, Windows Subsystem for Linux (WSL). WSL is treated separately because some tools run on the Linux side while others (e.g. VS Code) keep their user configuration on the Windows side.
+1. **Global:** company + personal `global/` sources go into the user-level agent folders (e.g. `~/.claude/`, `~/.copilot/`).
+2. **Projects:** each repo directly inside your repos folder that has a `.rulesync/` folder gets its project-level agent files (e.g. `CLAUDE.md`, `.github/copilot-instructions.md`).
+
+Every stage first does a dry run and lists each change as `new`, `update`, `remove (stale)`, or `OVERWRITE` / `DELETE (not generated)`. Then it applies them.
+
+Supported operating systems: Linux, macOS and WSL. In WSL, VS Code windows connected to WSL read the Linux home folder, the same as Claude Code. Writing to the Windows home folder for VS Code windows opened on Windows folders isn't supported for now.
 
 ### Generated Files
 
-Every file that `sync` writes carries a marker identifying it as generated, stored in the file itself (a header comment or a YAML frontmatter entry, depending on the format).
+Every source rule and `SKILL.md` must contain the marker defined in `agents.config.jsonc`; the sync stops with an error if one doesn't. Generated files inherit the marker, which tells them apart from hand-written files. External rules and skills get the marker appended on installation.
 
 - Generated files are overwritten on every run without notice.
 - Generated files whose source no longer exists are deleted.
-- Any non-generated instruction, skill or MCP file found in a vendor location raises an error. This is intended: all instructions should be tracked in git (company, personal or project repo), so `sync` tells you about untracked ones and you move them into the right repo. **This is disruptive to current workflow, so we need to be sure we want this before everyone implements it** 
+- Hand-written files that would be overwritten or deleted are listed, and are only changed after confirmation (or with `--yes`). Without a terminal (e.g. in a git hook), that stage is skipped with a warning. This is intended: all instructions should be tracked in git (company, personal or project repo), so the sync tells you about untracked ones and you move them into the right repo.
+- MCP servers are JSON and can't carry a marker. rulesync replaces the MCP servers in the agent's config (e.g. `~/.claude.json`) and keeps all other settings, so every MCP server has to be defined in a source.
 
 ### Project Stage
 
-Project-specific instructions, skills and MCP servers are defined in the respective repository and reviewed in its PRs. `sync` only touches a repo if a vendor needs a conversion (a step 2–5 above).
+Project-specific instructions, skills and MCP servers are defined in the respective repository's `.rulesync/` folder and reviewed in its PRs. A project can override the company's default agents and features with its own `rulesync.jsonc`.
 
-The project stage can be installed as a git hook (on checkout, merge and commit) so conversions stay up to date. If the hook is installed, a manual `sync` skips this stage.
+The project stage can be installed as git hooks (on checkout, merge and commit) so the generated files stay up to date. If the hooks are installed, a manual sync skips that repo.
 
 ### Personal Repo
 
-Same layout as this repo, synced after the company stage. `sync` doesn't resolve conflicts or precedence between company and personal instructions, as vendors handle this differently. Everyone is responsible for not keeping instructions that conflict with the company ones and objecting to merges into this repository, if such conflicts would be introduced by new company instructions.
+Same layout as this repo, synced after the company sources. Conflicts or precedence between company and personal instructions aren't resolved, as agents handle this differently. Everyone is responsible for not keeping instructions that conflict with the company ones and objecting to merges into this repository, if such conflicts would be introduced by new company instructions.
 
 ### Review Process
 
 The main branch of this repo is only merged after a joint review, where we agree on the proposed changes.
 
+## Open Questions
+
+- Whether generated files inside project repos are committed (so cloud agents and teammates without the sync see them) or gitignored.
+- VS Code reads both `~/.claude/` and `~/.copilot/` instructions, so it may load the global instructions twice.
+- Whether VS Code windows opened on Windows folders need the configuration in the Windows home folder as well.
+
+## Restrictions
+
+- VSCode chat does not allow global mcp synchronization (yet).
+
+## Development
+
+```bash
+npm install            # installs dependencies and builds dist/
+node dist/cli.js --dry-run
+```
+
+Running from a local clone syncs the company sources of that clone, which is useful for testing changes before they are merged.
